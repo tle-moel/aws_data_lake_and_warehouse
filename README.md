@@ -78,95 +78,32 @@ Upload the scripts in `/etl` to your Glue jobs and run them in order:
 Create the schema and tables using `sql/ddl/create_tables.sql`, then load with:
 
 ```bash
-# Run in Redshift query editor
-# Replace <YOUR_ACCOUNT_ID> and IAM role name before running
 sql/curated_to_redshift/load_star_schema.sql
 ```
 
 ### 4 — Run analytics queries
 
-Queries are in `sql/analytics/`. Run them in Redshift or adapt for Athena.
+Queries are in `sql/analytics/` and results are in `docs/query_results/`
 
 ### Query 1 — Rating Trends by Category and Year
 
-```sql
-SELECT cat.product_category, d.year,
-    ROUND(AVG(f.star_rating::DECIMAL(10,4)), 2) AS avg_rating,
-    COUNT(*) AS review_count
-FROM reviews.fact_reviews f
-JOIN reviews.dim_category cat ON f.category_key = cat.category_key
-JOIN reviews.dim_date d ON f.date_key = d.date_key
-GROUP BY cat.product_category, d.year
-ORDER BY cat.product_category, d.year;
-```
-
-- **Electronics** — gradual decline from 3.9 (1999) to a low of 3.53 (2004), then steady recovery to 4.11 by 2015. The dip likely reflects cheap commodity electronics flooding the market in the early 2000s.
-- **Video Games** — started strong at 4.13 (1999), dipped to 3.75 (2006) during the DLC and online pass controversy era, then recovered to 4.24 by 2015 — the highest of any category.
-- **Wireless** — sharpest drop, from 4.09 (2000) to 3.41 (2004-2005) when early smartphone accessories were poor quality, then slow recovery to 3.99 by 2015.
-- **Volume story:** Wireless dominates by 2013-2015 with up to 3M reviews/year vs Electronics at ~800K — the smartphone era is directly visible in this data.
+All three categories show a U-shaped rating trend — dipping in the early 2000s before recovering — with the smartphone era visible as Wireless review volume grows to 3M/year by 2015.
 
 ### Query 2 — Helpfulness Analysis per Category
 
-```sql
-SELECT cat.product_category,
-    ROUND(AVG(f.helpful_ratio::DECIMAL(10,4)), 4) AS avg_helpful_ratio,
-    COUNT(*) AS review_count
-FROM reviews.fact_reviews f
-JOIN reviews.dim_category cat ON f.category_key = cat.category_key
-WHERE CAST(f.total_votes AS INTEGER) > 0
-GROUP BY cat.product_category
-ORDER BY avg_helpful_ratio DESC;
-```
-
-- **Electronics reviews are the most helpful** (70%) — people researching expensive tech purchases rely heavily on detailed reviews.
-- **Video Games reviews are the least helpful** (56%) — gaming reviews tend to be more opinion-based and polarizing.
-- Only ~33% of all reviews ever received a helpfulness vote, meaning the vast majority are never evaluated by other users.
+Electronics reviews are the most helpful (70%) while Video Games are the least (56%), and only ~33% of all reviews ever received a helpfulness vote.
 
 ### Query 3 — Verified vs. Unverified Purchases
 
-```sql
-SELECT cat.product_category, f.verified_purchase_flag,
-    ROUND(AVG(f.star_rating::DECIMAL(10,4)), 2) AS avg_rating,
-    COUNT(*) AS review_count
-FROM reviews.fact_reviews f
-JOIN reviews.dim_category cat ON f.category_key = cat.category_key
-GROUP BY cat.product_category, f.verified_purchase_flag
-ORDER BY cat.product_category, f.verified_purchase_flag;
-```
-
-- Verified purchases rate consistently higher across all 3 categories (+0.34 stars for Electronics, +0.38 for Video Games, +0.06 for Wireless).
-- The gap is largest in Video Games — unverified reviews tend to be more negative, possibly from people reviewing games they never bought.
-- Wireless has the smallest gap (0.06), suggesting wireless accessory buyers have similar opinions regardless of purchase origin.
+Verified purchases rate consistently higher across all categories, with the largest gap in Video Games (+0.38 stars) and the smallest in Wireless (+0.06).
 
 ### Query 4 — Vine Program Impact
 
-```sql
-SELECT cat.product_category, f.vine_flag,
-    ROUND(AVG(f.star_rating::DECIMAL(10,4)), 2) AS avg_rating,
-    COUNT(*) AS review_count
-FROM reviews.fact_reviews f
-JOIN reviews.dim_category cat ON f.category_key = cat.category_key
-GROUP BY cat.product_category, f.vine_flag
-ORDER BY cat.product_category, f.vine_flag;
-```
-
-- Vine reviews are marginally higher (+0.09 for Electronics, +0.11 for Wireless, +0.01 for Video Games) — the bias from receiving free products is minimal.
-- Vine reviews are a tiny fraction of total volume (18K out of 3M Electronics reviews), so they have negligible impact on overall ratings.
-- **Execution time: 202ms** — the fastest query in the set, demonstrating Redshift's columnar storage efficiency on simple aggregations with no date join.
+Vine reviewers rate only marginally higher (+0.01 to +0.11 stars) despite receiving free products, suggesting the program's honest review requirement is largely respected. 
 
 ### Query 5 — Product Performance
 
-```sql
-SELECT cat.product_category, p.product_id, p.product_title,
-    COUNT(*) AS review_count,
-    ROUND(AVG(f.star_rating::DECIMAL(10,4)), 2) AS avg_rating
-FROM reviews.fact_reviews f
-JOIN reviews.dim_category cat ON f.category_key = cat.category_key
-JOIN reviews.dim_product p ON f.product_key = p.product_key
-GROUP BY cat.product_category, p.product_id, p.product_title
-ORDER BY review_count DESC
-LIMIT 10;
-```
+AmazonBasics dominates the top 10 entirely with commodity accessories — review volume is driven by purchase frequency, not product quality, with the PS4 as the only non-accessory thanks to its 2013 launch spike.
 
 ## Future Enhancements
 
