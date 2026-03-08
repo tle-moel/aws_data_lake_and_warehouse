@@ -1,4 +1,4 @@
-# aws_data_lake_and_warehouse# AWS Data Lake & Warehouse — Amazon Customer Reviews
+# AWS Data Lake & Warehouse — Amazon Customer Reviews
 
 ## Overview
 
